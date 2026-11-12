@@ -10,6 +10,7 @@ import {
 } from "../components/ui/toast"
 import QueueCommands from "../components/Queue/QueueCommands"
 import ModelSelector from "../components/ui/ModelSelector"
+import InterviewCopilot from "../components/Meeting/InterviewCopilot"
 
 interface QueueProps {
   setView: React.Dispatch<React.SetStateAction<"queue" | "solutions" | "debug">>
@@ -34,9 +35,8 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
   const chatInputRef = useRef<HTMLInputElement>(null)
   
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [currentModel, setCurrentModel] = useState<{ provider: string; model: string }>({ provider: "gemini", model: "gemini-3-pro-preview" })
-
-  const barRef = useRef<HTMLDivElement>(null)
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false)
+  const [currentModel, setCurrentModel] = useState<{ provider: string; model: string }>({ provider: "gemini", model: "gemini-2.0-flash" })
 
   const { data: screenshots = [], refetch } = useQuery<Array<{ path: string; preview: string }>, Error>(
     ["screenshots"],
@@ -137,7 +137,29 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     updateDimensions()
 
     const cleanupFunctions = [
-      window.electronAPI.onScreenshotTaken(() => refetch()),
+      window.electronAPI.onScreenshotTaken(async (data: { path: string; preview: string }) => {
+        await refetch()
+        if (data?.path) {
+          setIsChatOpen(true)
+          setChatLoading(true)
+          try {
+            const response = await window.electronAPI.invoke("analyze-image-file", data.path)
+            if (response?.text) {
+              setChatMessages((msgs) => [
+                ...msgs,
+                { role: "gemini", text: response.text }
+              ])
+            }
+          } catch (err: any) {
+            setChatMessages((msgs) => [
+              ...msgs,
+              { role: "gemini", text: "Error solving question: " + String(err?.message || err) }
+            ])
+          } finally {
+            setChatLoading(false)
+          }
+        }
+      }),
       window.electronAPI.onResetView(() => refetch()),
       window.electronAPI.onSolutionError((error: string) => {
         showToast(
@@ -163,33 +185,6 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
     }
   }, [isTooltipVisible, tooltipHeight])
 
-  // Seamless screenshot-to-LLM flow
-  useEffect(() => {
-    // Listen for screenshot taken event
-    const unsubscribe = window.electronAPI.onScreenshotTaken(async (data) => {
-      // Refetch screenshots to update the queue
-      await refetch();
-      // Show loading in chat
-      setChatLoading(true);
-      try {
-        // Get the latest screenshot path
-        const latest = data?.path || (Array.isArray(data) && data.length > 0 && data[data.length - 1]?.path);
-        if (latest) {
-          // Call the LLM to process the screenshot
-          const response = await window.electronAPI.invoke("analyze-image-file", latest);
-          setChatMessages((msgs) => [...msgs, { role: "gemini", text: response.text }]);
-        }
-      } catch (err) {
-        setChatMessages((msgs) => [...msgs, { role: "gemini", text: "Error: " + String(err) }]);
-      } finally {
-        setChatLoading(false);
-      }
-    });
-    return () => {
-      unsubscribe && unsubscribe();
-    };
-  }, [refetch]);
-
   const handleTooltipVisibilityChange = (visible: boolean, height: number) => {
     setIsTooltipVisible(visible)
     setTooltipHeight(height)
@@ -205,24 +200,22 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
 
   const handleModelChange = (provider: "ollama" | "gemini", model: string) => {
     setCurrentModel({ provider, model })
-    // Update chat messages to reflect the model change
-    const modelName = provider === "ollama" ? model : "Gemini 3 Pro"
+    const modelName = provider === "ollama" ? model : "Gemini 2.0 Flash"
     setChatMessages((msgs) => [...msgs, { 
       role: "gemini", 
       text: `🔄 Switched to ${provider === "ollama" ? "🏠" : "☁️"} ${modelName}. Ready for your questions!` 
     }])
   }
 
-
   return (
     <div
-      ref={barRef}
+      ref={contentRef}
       style={{
         position: "relative",
-        width: "100%",
+        width: isCopilotOpen || isChatOpen || isSettingsOpen ? "580px" : "100%",
         pointerEvents: "auto"
       }}
-      className="select-none"
+      className="select-none transition-all duration-200"
     >
       <div className="bg-transparent w-full">
         <div className="px-2 py-1">
@@ -235,14 +228,40 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
             <ToastTitle>{toastMessage.title}</ToastTitle>
             <ToastDescription>{toastMessage.description}</ToastDescription>
           </Toast>
+
+          {/* Render screenshot previews in queue */}
+          {screenshots.length > 0 && (
+            <div className="mb-2 w-fit">
+              <ScreenshotQueue
+                isLoading={false}
+                screenshots={screenshots}
+                onDeleteScreenshot={handleDeleteScreenshot}
+              />
+            </div>
+          )}
+
           <div className="w-fit">
             <QueueCommands
               screenshots={screenshots}
               onTooltipVisibilityChange={handleTooltipVisibilityChange}
               onChatToggle={handleChatToggle}
               onSettingsToggle={handleSettingsToggle}
+              onCopilotToggle={() => setIsCopilotOpen(!isCopilotOpen)}
+              isCopilotOpen={isCopilotOpen}
             />
           </div>
+
+          {/* Live Interview Copilot */}
+          {isCopilotOpen && (
+            <div className="w-full">
+              <InterviewCopilot
+                isOpen={isCopilotOpen}
+                onClose={() => setIsCopilotOpen(false)}
+                onToast={showToast}
+              />
+            </div>
+          )}
+
           {/* Conditional Settings Interface */}
           {isSettingsOpen && (
             <div className="mt-4 w-full mx-auto">
@@ -258,7 +277,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
                 <div className="text-sm text-gray-600 text-center mt-8">
                   💬 Chat with {currentModel.provider === "ollama" ? "🏠" : "☁️"} {currentModel.model}
                   <br />
-                  <span className="text-xs text-gray-500">Take a screenshot (Cmd+H) for automatic analysis</span>
+                  <span className="text-xs text-gray-500">Press Cmd+H to capture screenshot and solve immediately</span>
                   <br />
                   <span className="text-xs text-gray-500">Click ⚙️ Models to switch AI providers</span>
                 </div>
@@ -269,12 +288,12 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
                     className={`w-full flex ${msg.role === "user" ? "justify-end" : "justify-start"} mb-3`}
                   >
                     <div
-                      className={`max-w-[80%] px-3 py-1.5 rounded-xl text-xs shadow-md backdrop-blur-sm border ${
+                      className={`max-w-[85%] px-3.5 py-2.5 rounded-xl text-xs shadow-md backdrop-blur-sm border ${
                         msg.role === "user" 
                           ? "bg-gray-700/80 text-gray-100 ml-12 border-gray-600/40" 
-                          : "bg-white/85 text-gray-700 mr-12 border-gray-200/50"
+                          : "bg-white/90 text-gray-900 mr-8 border-gray-200/50"
                       }`}
-                      style={{ wordBreak: "break-word", lineHeight: "1.4" }}
+                      style={{ wordBreak: "break-word", lineHeight: "1.5", whiteSpace: "pre-wrap" }}
                     >
                       {msg.text}
                     </div>
@@ -288,7 +307,7 @@ const Queue: React.FC<QueueProps> = ({ setView }) => {
                       <span className="animate-pulse text-gray-400">●</span>
                       <span className="animate-pulse animation-delay-200 text-gray-400">●</span>
                       <span className="animate-pulse animation-delay-400 text-gray-400">●</span>
-                      <span className="ml-2">{currentModel.model} is replying...</span>
+                      <span className="ml-2 font-medium">Solving question...</span>
                     </span>
                   </div>
                 </div>

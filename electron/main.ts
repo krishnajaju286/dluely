@@ -1,9 +1,10 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage } from "electron"
+import { app, BrowserWindow, Tray, Menu, nativeImage, session, desktopCapturer } from "electron"
 import { initializeIpcHandlers } from "./ipcHandlers"
 import { WindowHelper } from "./WindowHelper"
 import { ScreenshotHelper } from "./ScreenshotHelper"
 import { ShortcutsHelper } from "./shortcuts"
 import { ProcessingHelper } from "./ProcessingHelper"
+import { MeetingHelper } from "./MeetingHelper"
 
 export class AppState {
   private static instance: AppState | null = null
@@ -12,6 +13,7 @@ export class AppState {
   private screenshotHelper: ScreenshotHelper
   public shortcutsHelper: ShortcutsHelper
   public processingHelper: ProcessingHelper
+  public meetingHelper: MeetingHelper
   private tray: Tray | null = null
 
   // View management
@@ -55,6 +57,9 @@ export class AppState {
     // Initialize ProcessingHelper
     this.processingHelper = new ProcessingHelper(this)
 
+    // Initialize MeetingHelper using the LLM helper
+    this.meetingHelper = new MeetingHelper(this.processingHelper.getLLMHelper())
+
     // Initialize ShortcutsHelper
     this.shortcutsHelper = new ShortcutsHelper(this)
   }
@@ -64,6 +69,10 @@ export class AppState {
       AppState.instance = new AppState()
     }
     return AppState.instance
+  }
+
+  public getMeetingHelper(): MeetingHelper {
+    return this.meetingHelper
   }
 
   // Getters and Setters
@@ -200,7 +209,7 @@ export class AppState {
     
     const contextMenu = Menu.buildFromTemplate([
       {
-        label: 'Show Interview Coder',
+        label: 'Show Dluely',
         click: () => {
           this.centerAndShowWindow()
         }
@@ -244,12 +253,12 @@ export class AppState {
       }
     ])
     
-    this.tray.setToolTip('Interview Coder - Press Cmd+Shift+Space to show')
+    this.tray.setToolTip('Dluely - Press Cmd+Shift+Space to show')
     this.tray.setContextMenu(contextMenu)
     
     // Set a title for macOS (will appear in menu bar)
     if (process.platform === 'darwin') {
-      this.tray.setTitle('IC')
+      this.tray.setTitle('Dluely')
     }
     
     // Double-click to show window
@@ -276,6 +285,30 @@ async function initializeApp() {
 
   app.whenReady().then(() => {
     console.log("App is ready")
+
+    // Configure system audio / display capture request handler for live meeting audio capture
+    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+      desktopCapturer.getSources({ types: ["screen", "window"] }).then((sources) => {
+        if (sources.length > 0) {
+          // Loopback capture for meeting audio if supported
+          callback({ video: sources[0], audio: "loopback" })
+        } else {
+          callback({})
+        }
+      }).catch((err) => {
+        console.warn("[Main] Error getting desktop capturer sources:", err)
+        callback({})
+      })
+    })
+
+    // Grant media & display-capture permissions automatically to avoid OS prompt blocking
+    session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      if (permission === "media" || permission === "display-capture") {
+        return callback(true)
+      }
+      callback(true)
+    })
+
     appState.createWindow()
     appState.createTray()
     // Register global shortcuts using ShortcutsHelper

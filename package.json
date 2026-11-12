@@ -1,13 +1,13 @@
 {
-  "name": "interview-coder",
+  "name": "dluely",
   "version": "1.0.0",
+  "description": "Dluely - Free, Open-Source Real-Time AI Interview Copilot & Problem Solver",
   "main": "./dist-electron/main.js",
   "scripts": {
     "clean": "rimraf dist dist-electron",
     "dev": "vite",
-    "build": "npm run clean && tsc && vite build",
+    "build": "npm run clean && tsc -p electron/tsconfig.json && tsc && vite build",
     "preview": "vite preview",
-    "postinstall": "cross-env SHARP_IGNORE_GLOBAL_LIBVIPS=1 npm rebuild sharp",
     "electron:dev": "tsc -p electron/tsconfig.json && cross-env NODE_ENV=development electron .",
     "electron:build": "tsc -p electron/tsconfig.json && cross-env NODE_ENV=production electron .",
     "app:dev": "concurrently \"npm run dev -- --port 5180\" \"wait-on http://localhost:5180 && npm run electron:dev\"",
@@ -17,8 +17,8 @@
     "dist": "npm run app:build"
   },
   "build": {
-    "appId": "com.electron.meeting-notes",
-    "productName": "Meeting Notes Coder",
+    "appId": "com.dluely.app",
+    "productName": "Dluely",
     "files": [
       "dist/**/*",
       "dist-electron/**/*",
@@ -29,12 +29,6 @@
       "output": "release",
       "buildResources": "assets"
     },
-    "extraResources": [
-      {
-        "from": "assets/",
-        "to": "assets/"
-      }
-    ],
     "mac": {
       "category": "public.app-category.productivity",
       "target": [
@@ -46,19 +40,11 @@
           ]
         }
       ],
-      "icon": "assets/icons/mac/icon.icns",
       "hardenedRuntime": true,
       "entitlements": "assets/entitlements.mac.plist"
     },
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64",
-            "ia32"
-          ]
-        },
         {
           "target": "portable",
           "arch": [
@@ -66,7 +52,6 @@
           ]
         }
       ],
-      "icon": "assets/icons/win/icon.ico",
       "requestedExecutionLevel": "asInvoker"
     },
     "linux": {
@@ -76,35 +61,24 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "deb",
-          "arch": [
-            "x64"
-          ]
         }
       ],
-      "icon": "assets/icons/png/",
-      "category": "Office"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": false
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "ibttf",
-        "repo": "interview-coder-frontend"
-      }
-    ]
+      "category": "Utility"
+    }
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "ai",
+    "interview-copilot",
+    "electron",
+    "gemini",
+    "ollama",
+    "realtime-audio",
+    "screenshot-solver",
+    "meeting-minutes",
+    "open-source"
+  ],
+  "author": "Dluely Contributors",
+  "license": "Apache-2.0",
   "devDependencies": {
     "@types/color": "^4.2.0",
     "@types/diff": "^6.0.0",
@@ -134,26 +108,21 @@
     "wait-on": "^8.0.1"
   },
   "dependencies": {
-    "@google/genai": "^0.12.0",
     "@google/generative-ai": "^0.2.1",
     "@radix-ui/react-dialog": "^1.1.2",
     "@radix-ui/react-toast": "^1.2.2",
-    "axios": "^1.7.7",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "diff": "^7.0.0",
-    "form-data": "^4.0.1",
+    "dotenv": "^16.4.5",
     "lucide-react": "^0.460.0",
     "react": "^18.3.1",
-    "react-code-blocks": "^0.1.6",
     "react-dom": "^18.3.1",
     "react-icons": "^5.3.0",
     "react-query": "^3.39.3",
     "react-syntax-highlighter": "^15.6.1",
     "screenshot-desktop": "^1.15.0",
-    "sharp": "^0.33.5",
     "tailwind-merge": "^2.5.4",
-    "tesseract.js": "^5.0.5",
     "uuid": "^11.0.3"
   }
 }

@@ -30,9 +30,10 @@ export class ProcessingHelper {
     } else {
       const apiKey = process.env.GEMINI_API_KEY
       if (!apiKey) {
-        throw new Error("GEMINI_API_KEY not found in environment variables. Set GEMINI_API_KEY or enable Ollama with USE_OLLAMA=true")
+        console.warn("[ProcessingHelper] GEMINI_API_KEY not found in .env. Launching in setup mode. Please configure your key in .env or switch to Ollama.")
+      } else {
+        console.log("[ProcessingHelper] Initializing with Gemini")
       }
-      console.log("[ProcessingHelper] Initializing with Gemini")
       this.llmHelper = new LLMHelper(apiKey, false)
     }
   }
@@ -50,50 +51,43 @@ export class ProcessingHelper {
         return
       }
 
-      // Check if last screenshot is an audio file
-      const allPaths = this.appState.getScreenshotHelper().getScreenshotQueue();
-      const lastPath = allPaths[allPaths.length - 1];
-      if (lastPath.endsWith('.mp3') || lastPath.endsWith('.wav')) {
-        mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_START);
-        this.appState.setView('solutions');
-        try {
-          const audioResult = await this.llmHelper.analyzeAudioFile(lastPath);
-          mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.PROBLEM_EXTRACTED, audioResult);
-          this.appState.setProblemInfo({ problem_statement: audioResult.text, input_format: {}, output_format: {}, constraints: [], test_cases: [] });
-          return;
-        } catch (err: any) {
-          console.error('Audio processing error:', err);
-          mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR, err.message);
-          return;
-        }
-      }
-
-      // NEW: Handle screenshot as plain text (like audio)
       mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_START)
       this.appState.setView("solutions")
       this.currentProcessingAbortController = new AbortController()
+
       try {
-        const imageResult = await this.llmHelper.analyzeImageFile(lastPath);
+        // Step 1: Extract Problem Statement from all queued screenshots
+        const problemData = await this.llmHelper.extractProblemFromImages(screenshotQueue)
         const problemInfo = {
-          problem_statement: imageResult.text,
-          input_format: { description: "Generated from screenshot", parameters: [] as any[] },
-          output_format: { description: "Generated from screenshot", type: "string", subtype: "text" },
+          problem_statement: problemData.problem_statement || (typeof problemData === "string" ? problemData : JSON.stringify(problemData)),
+          input_format: { description: problemData.context || "Extracted from screenshots", parameters: [] as any[] },
+          output_format: { description: "Suggested Responses", type: "string", subtype: "text" },
           complexity: { time: "N/A", space: "N/A" },
           test_cases: [] as any[],
-          validation_type: "manual",
-          difficulty: "custom"
-        };
-        mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.PROBLEM_EXTRACTED, problemInfo);
-        this.appState.setProblemInfo(problemInfo);
+          validation_type: "standard",
+          difficulty: "custom",
+          suggested_responses: problemData.suggested_responses || [],
+          reasoning: problemData.reasoning || ""
+        }
+
+        this.appState.setProblemInfo(problemInfo)
+        mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.PROBLEM_EXTRACTED, problemInfo)
+
+        // Step 2: Generate Full Solution
+        const solutionData = await this.llmHelper.generateSolution(problemInfo)
+        mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.SOLUTION_SUCCESS, solutionData)
       } catch (error: any) {
-        console.error("Image processing error:", error)
-        mainWindow.webContents.send(this.appState.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR, error.message)
+        console.error("Screenshot processing error:", error)
+        mainWindow.webContents.send(
+          this.appState.PROCESSING_EVENTS.INITIAL_SOLUTION_ERROR,
+          error?.message || String(error)
+        )
       } finally {
         this.currentProcessingAbortController = null
       }
-      return;
+      return
     } else {
-      // Debug mode
+      // Debug mode (in solutions view)
       const extraScreenshotQueue = this.appState.getScreenshotHelper().getExtraScreenshotQueue()
       if (extraScreenshotQueue.length === 0) {
         console.log("No extra screenshots to process")
@@ -105,17 +99,15 @@ export class ProcessingHelper {
       this.currentExtraProcessingAbortController = new AbortController()
 
       try {
-        // Get problem info and current solution
         const problemInfo = this.appState.getProblemInfo()
         if (!problemInfo) {
-          throw new Error("No problem info available")
+          throw new Error("No problem info available to debug")
         }
 
-        // Get current solution from state
+        // Get current solution from LLM state or regenerate
         const currentSolution = await this.llmHelper.generateSolution(problemInfo)
-        const currentCode = currentSolution.solution.code
+        const currentCode = currentSolution?.solution?.code || ""
 
-        // Debug the solution using vision model
         const debugResult = await this.llmHelper.debugSolutionWithImages(
           problemInfo,
           currentCode,
@@ -127,12 +119,11 @@ export class ProcessingHelper {
           this.appState.PROCESSING_EVENTS.DEBUG_SUCCESS,
           debugResult
         )
-
       } catch (error: any) {
         console.error("Debug processing error:", error)
         mainWindow.webContents.send(
           this.appState.PROCESSING_EVENTS.DEBUG_ERROR,
-          error.message
+          error?.message || String(error)
         )
       } finally {
         this.currentExtraProcessingAbortController = null

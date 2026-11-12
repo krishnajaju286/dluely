@@ -246,7 +246,7 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
           setIsResetting(false)
         }, 0)
       }),
-      window.electronAPI.onSolutionStart(async () => {
+      window.electronAPI.onSolutionStart(() => {
         // Reset UI state for a new solution
         setSolutionData(null)
         setThoughtsData(null)
@@ -254,48 +254,6 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
         setSpaceComplexityData(null)
         setCustomContent(null)
         setAudioResult(null)
-
-        // Start audio recording from user's microphone
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-          const mediaRecorder = new MediaRecorder(stream)
-          const chunks: Blob[] = []
-          mediaRecorder.ondataavailable = (e) => chunks.push(e.data)
-          mediaRecorder.start()
-          setAudioRecording(true)
-          // Record for 5 seconds (or adjust as needed)
-          setTimeout(() => mediaRecorder.stop(), 5000)
-          mediaRecorder.onstop = async () => {
-            setAudioRecording(false)
-            const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' })
-            const reader = new FileReader()
-            reader.onloadend = async () => {
-              const base64Data = (reader.result as string).split(',')[1]
-              // Send audio to Gemini for analysis
-              try {
-                const result = await window.electronAPI.analyzeAudioFromBase64(
-                  base64Data,
-                  blob.type
-                )
-                // Store result in react-query cache
-                queryClient.setQueryData(["audio_result"], result)
-                setAudioResult(result)
-              } catch (err) {
-                console.error('Audio analysis failed:', err)
-              }
-            }
-            reader.readAsDataURL(blob)
-          }
-        } catch (err) {
-          console.error('Audio recording error:', err)
-        }
-
-        // Simulate receiving custom content shortly after start
-        setTimeout(() => {
-          setCustomContent(
-            "This is the dynamically generated content appearing after loading starts."
-          )
-        }, 1500) // Example delay
       }),
       //if there was an error processing the initial solution
       window.electronAPI.onSolutionError((error: string) => {
@@ -489,68 +447,55 @@ const Solutions: React.FC<SolutionsProps> = ({ setView }) => {
           <div className="w-full text-sm text-black bg-black/60 rounded-md">
             <div className="rounded-lg overflow-hidden">
               <div className="px-4 py-3 space-y-4 max-w-full">
-                {/* Show Screenshot or Audio Result as main output if validation_type is manual */}
-                {problemStatementData?.validation_type === "manual" ? (
-                  <ContentSection
-                    title={problemStatementData?.output_format?.subtype === "voice" ? "Audio Result" : "Screenshot Result"}
-                    content={problemStatementData.problem_statement}
-                    isLoading={false}
-                  />
-                ) : (
+                {/* Problem Statement Section */}
+                <ContentSection
+                  title={problemStatementData?.output_format?.subtype === "voice" ? "Voice Input" : "Problem Statement"}
+                  content={problemStatementData?.problem_statement}
+                  isLoading={!problemStatementData}
+                />
+
+                {/* Show loading state when waiting for solution */}
+                {problemStatementData && !solutionData && (
+                  <div className="mt-4 flex">
+                    <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
+                      Generating solution...
+                    </p>
+                  </div>
+                )}
+
+                {/* Solution Sections */}
+                {solutionData && (
                   <>
-                    {/* Problem Statement Section - Only for non-manual */}
-                    <ContentSection
-                      title={problemStatementData?.output_format?.subtype === "voice" ? "Voice Input" : "Problem Statement"}
-                      content={problemStatementData?.problem_statement}
-                      isLoading={!problemStatementData}
-                    />
-                    {/* Show loading state when waiting for solution */}
-                    {problemStatementData && !solutionData && (
-                      <div className="mt-4 flex">
-                        <p className="text-xs bg-gradient-to-r from-gray-300 via-gray-100 to-gray-300 bg-clip-text text-transparent animate-pulse">
-                          {problemStatementData?.output_format?.subtype === "voice" 
-                            ? "Processing voice input..." 
-                            : "Generating solutions..."}
-                        </p>
-                      </div>
-                    )}
-                    {/* Solution Sections (legacy, only for non-manual) */}
-                    {solutionData && (
-                      <>
-                        <ContentSection
-                          title="Analysis"
-                          content={
-                            thoughtsData && (
-                              <div className="space-y-3">
-                                <div className="space-y-1">
-                                  {thoughtsData.map((thought, index) => (
-                                    <div
-                                      key={index}
-                                      className="flex items-start gap-2"
-                                    >
-                                      <div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />
-                                      <div>{thought}</div>
-                                    </div>
-                                  ))}
-                                </div>
+                    {thoughtsData && thoughtsData.length > 0 && (
+                      <ContentSection
+                        title="Key Analysis & Suggestions"
+                        content={
+                          <div className="space-y-1">
+                            {thoughtsData.map((thought, index) => (
+                              <div
+                                key={index}
+                                className="flex items-start gap-2"
+                              >
+                                <div className="w-1 h-1 rounded-full bg-blue-400/80 mt-2 shrink-0" />
+                                <div>{thought}</div>
                               </div>
-                            )
-                          }
-                          isLoading={!thoughtsData}
-                        />
-                        <SolutionSection
-                          title={problemStatementData?.output_format?.subtype === "voice" ? "Response" : "Solution"}
-                          content={solutionData}
-                          isLoading={!solutionData}
-                        />
-                        {problemStatementData?.output_format?.subtype !== "voice" && (
-                          <ComplexitySection
-                            timeComplexity={timeComplexityData}
-                            spaceComplexity={spaceComplexityData}
-                            isLoading={!timeComplexityData || !spaceComplexityData}
-                          />
-                        )}
-                      </>
+                            ))}
+                          </div>
+                        }
+                        isLoading={false}
+                      />
+                    )}
+                    <SolutionSection
+                      title="Solution"
+                      content={solutionData}
+                      isLoading={false}
+                    />
+                    {timeComplexityData && timeComplexityData !== "N/A" && (
+                      <ComplexitySection
+                        timeComplexity={timeComplexityData}
+                        spaceComplexity={spaceComplexityData || "N/A"}
+                        isLoading={false}
+                      />
                     )}
                   </>
                 )}

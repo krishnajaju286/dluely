@@ -1,6 +1,6 @@
 
 import { BrowserWindow, screen } from "electron"
-import { AppState } from "main"
+import { AppState } from "./main"
 import path from "node:path"
 
 const isDev = process.env.NODE_ENV === "development"
@@ -16,10 +16,10 @@ export class WindowHelper {
   private windowSize: { width: number; height: number } | null = null
   private appState: AppState
 
-  // Initialize with explicit number type and 0 value
+  // Initialize with explicit number type and step value
   private screenWidth: number = 0
   private screenHeight: number = 0
-  private step: number = 0
+  private step: number = 50
   private currentX: number = 0
   private currentY: number = 0
 
@@ -37,14 +37,15 @@ export class WindowHelper {
     const primaryDisplay = screen.getPrimaryDisplay()
     const workArea = primaryDisplay.workAreaSize
 
-    // Use 75% width if debugging has occurred, otherwise use 60%
-    const maxAllowedWidth = Math.floor(
-      workArea.width * (this.appState.getHasDebugged() ? 0.75 : 0.5)
+    // Allow up to 80% width if debugging, otherwise up to 65% width (at least 620px)
+    const maxAllowedWidth = Math.min(
+      workArea.width - 20,
+      Math.max(620, Math.floor(workArea.width * (this.appState.getHasDebugged() ? 0.8 : 0.65)))
     )
 
-    // Ensure width doesn't exceed max allowed width and height is reasonable
+    // Ensure width doesn't exceed max allowed width and height doesn't exceed screen
     const newWidth = Math.min(width + 32, maxAllowedWidth)
-    const newHeight = Math.ceil(height)
+    const newHeight = Math.min(Math.ceil(height), workArea.height - 40)
 
     // Center the window horizontally if it would go off screen
     const maxX = workArea.width - newWidth
@@ -79,7 +80,7 @@ export class WindowHelper {
       minWidth: 300,
       minHeight: 200,
       webPreferences: {
-        nodeIntegration: true,
+        nodeIntegration: false,
         contextIsolation: true,
         preload: path.join(__dirname, "preload.js")
       },

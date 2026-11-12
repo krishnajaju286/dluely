@@ -41,6 +41,33 @@ interface ElectronAPI {
   switchToOllama: (model?: string, url?: string) => Promise<{ success: boolean; error?: string }>
   switchToGemini: (apiKey?: string) => Promise<{ success: boolean; error?: string }>
   testLlmConnection: () => Promise<{ success: boolean; error?: string }>
+
+  // Live Interview Copilot / Meeting Management
+  startMeeting: (meetingName?: string) => Promise<{ success: boolean; filePath: string }>
+  processMeetingAudioChunk: (data: string, mimeType: string) => Promise<{
+    success: boolean
+    transcript?: string
+    newCard?: {
+      id: string
+      type: "question" | "term"
+      detected_text: string
+      direct_answer: string
+      key_points: string[]
+      timestamp: string
+    }
+    totalQuestions?: number
+    error?: string
+  }>
+  stopMeeting: () => Promise<{ success: boolean; filePath: string; summary?: string; questionsCount: number }>
+  openMeetingsFolder: () => Promise<{ success: boolean }>
+  getMeetingStatus: () => Promise<{
+    isMeetingActive: boolean
+    meetingTitle: string
+    meetingFilePath: string | null
+    startTime: number | null
+    questionsCount: number
+    meetingsDir: string
+  }>
   
   invoke: (channel: string, ...args: any[]) => Promise<any>
 }
@@ -184,8 +211,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getCurrentLlmConfig: () => ipcRenderer.invoke("get-current-llm-config"),
   getAvailableOllamaModels: () => ipcRenderer.invoke("get-available-ollama-models"),
   switchToOllama: (model?: string, url?: string) => ipcRenderer.invoke("switch-to-ollama", model, url),
-  switchToGemini: (apiKey?: string) => ipcRenderer.invoke("switch-to-gemini", apiKey),
+  switchToGemini: (apiKey?: string, model?: string) => ipcRenderer.invoke("switch-to-gemini", apiKey, model),
   testLlmConnection: () => ipcRenderer.invoke("test-llm-connection"),
+
+  // Live Interview Copilot / Meeting Management
+  startMeeting: (meetingName?: string) => ipcRenderer.invoke("meeting:start", meetingName),
+  processMeetingAudioChunk: (data: string, mimeType: string) => ipcRenderer.invoke("meeting:process-audio-chunk", data, mimeType),
+  stopMeeting: () => ipcRenderer.invoke("meeting:stop"),
+  openMeetingsFolder: () => ipcRenderer.invoke("meeting:open-folder"),
+  getMeetingStatus: () => ipcRenderer.invoke("meeting:get-status"),
   
   invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
 } as ElectronAPI)

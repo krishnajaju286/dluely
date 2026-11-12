@@ -80,18 +80,12 @@ export class ShortcutsHelper {
 
     globalShortcut.register("CommandOrControl+B", () => {
       this.appState.toggleMainWindow()
-      // If window exists and we're showing it, bring it to front
+      // If window is now visible, bring it to front
       const mainWindow = this.appState.getMainWindow()
-      if (mainWindow && !this.appState.isVisible()) {
-        // Force the window to the front on macOS
+      if (mainWindow && this.appState.isVisible()) {
         if (process.platform === "darwin") {
-          mainWindow.setAlwaysOnTop(true, "normal")
-          // Reset alwaysOnTop after a brief delay
-          setTimeout(() => {
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.setAlwaysOnTop(true, "floating")
-            }
-          }, 100)
+          mainWindow.setAlwaysOnTop(true, "floating")
+          mainWindow.focus()
         }
       }
     })

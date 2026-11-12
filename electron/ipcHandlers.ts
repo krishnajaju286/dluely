@@ -175,10 +175,10 @@ export function initializeIpcHandlers(appState: AppState): void {
     }
   });
 
-  ipcMain.handle("switch-to-gemini", async (_, apiKey?: string) => {
+  ipcMain.handle("switch-to-gemini", async (_, apiKey?: string, model?: string) => {
     try {
       const llmHelper = appState.processingHelper.getLLMHelper();
-      await llmHelper.switchToGemini(apiKey);
+      await llmHelper.switchToGemini(apiKey, model);
       return { success: true };
     } catch (error: any) {
       console.error("Error switching to Gemini:", error);
@@ -194,6 +194,56 @@ export function initializeIpcHandlers(appState: AppState): void {
     } catch (error: any) {
       console.error("Error testing LLM connection:", error);
       return { success: false, error: error.message };
+    }
+  });
+
+  // ==========================================
+  // Live Interview Copilot / Meeting Handlers
+  // ==========================================
+
+  ipcMain.handle("meeting:start", async (_, meetingName?: string) => {
+    try {
+      return await appState.getMeetingHelper().startMeeting(meetingName);
+    } catch (error: any) {
+      console.error("[IPC] Error starting meeting:", error);
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
+  ipcMain.handle("meeting:process-audio-chunk", async (_, data: string, mimeType: string) => {
+    try {
+      return await appState.getMeetingHelper().processAudioChunk(data, mimeType);
+    } catch (error: any) {
+      console.error("[IPC] Error processing meeting audio chunk:", error);
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
+  ipcMain.handle("meeting:stop", async () => {
+    try {
+      return await appState.getMeetingHelper().stopMeeting();
+    } catch (error: any) {
+      console.error("[IPC] Error stopping meeting:", error);
+      return { success: false, error: error?.message || String(error), questionsCount: 0 };
+    }
+  });
+
+  ipcMain.handle("meeting:open-folder", async () => {
+    try {
+      appState.getMeetingHelper().openMeetingsFolder();
+      return { success: true };
+    } catch (error: any) {
+      console.error("[IPC] Error opening meeting folder:", error);
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
+  ipcMain.handle("meeting:get-status", async () => {
+    try {
+      return appState.getMeetingHelper().getStatus();
+    } catch (error: any) {
+      console.error("[IPC] Error getting meeting status:", error);
+      return { isMeetingActive: false, error: error?.message || String(error) };
     }
   });
 }

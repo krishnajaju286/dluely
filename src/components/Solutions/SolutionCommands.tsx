@@ -198,10 +198,10 @@ const SolutionCommands: React.FC<SolutionCommandsProps> = ({
             )}
           </div>
 
-          {/* Sign Out Button */}
+          {/* Quit App Button */}
           <button
             className="text-red-500/70 hover:text-red-500/90 transition-colors hover:cursor-pointer"
-            title="Sign Out"
+            title="Quit App"
             onClick={() => window.electronAPI.quitApp()}
           >
             <IoLogOutOutline className="w-4 h-4" />

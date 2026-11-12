@@ -7,21 +7,20 @@ interface QueueCommandsProps {
   screenshots: Array<{ path: string; preview: string }>
   onChatToggle: () => void
   onSettingsToggle: () => void
+  onCopilotToggle?: () => void
+  isCopilotOpen?: boolean
 }
 
 const QueueCommands: React.FC<QueueCommandsProps> = ({
   onTooltipVisibilityChange,
   screenshots,
   onChatToggle,
-  onSettingsToggle
+  onSettingsToggle,
+  onCopilotToggle,
+  isCopilotOpen = false
 }) => {
   const [isTooltipVisible, setIsTooltipVisible] = useState(false)
   const tooltipRef = useRef<HTMLDivElement>(null)
-  const [isRecording, setIsRecording] = useState(false)
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null)
-  const [audioResult, setAudioResult] = useState<string | null>(null)
-  const chunks = useRef<Blob[]>([])
-  // Remove all chat-related state, handlers, and the Dialog overlay from this file.
 
   useEffect(() => {
     let tooltipHeight = 0
@@ -37,42 +36,6 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
 
   const handleMouseLeave = () => {
     setIsTooltipVisible(false)
-  }
-
-  const handleRecordClick = async () => {
-    if (!isRecording) {
-      // Start recording
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-        const recorder = new MediaRecorder(stream)
-        recorder.ondataavailable = (e) => chunks.current.push(e.data)
-        recorder.onstop = async () => {
-          const blob = new Blob(chunks.current, { type: chunks.current[0]?.type || 'audio/webm' })
-          chunks.current = []
-          const reader = new FileReader()
-          reader.onloadend = async () => {
-            const base64Data = (reader.result as string).split(',')[1]
-            try {
-              const result = await window.electronAPI.analyzeAudioFromBase64(base64Data, blob.type)
-              setAudioResult(result.text)
-            } catch (err) {
-              setAudioResult('Audio analysis failed.')
-            }
-          }
-          reader.readAsDataURL(blob)
-        }
-        setMediaRecorder(recorder)
-        recorder.start()
-        setIsRecording(true)
-      } catch (err) {
-        setAudioResult('Could not start recording.')
-      }
-    } else {
-      // Stop recording
-      mediaRecorder?.stop()
-      setIsRecording(false)
-      setMediaRecorder(null)
-    }
   }
 
   // Remove handleChatSend function
@@ -111,17 +74,25 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
           </div>
         )}
 
-        {/* Voice Recording Button */}
+        {/* Voice Recording / Live Copilot Button */}
         <div className="flex items-center gap-2">
           <button
-            className={`bg-white/10 hover:bg-white/20 transition-colors rounded-md px-2 py-1 text-[11px] leading-none text-white/70 flex items-center gap-1 ${isRecording ? 'bg-red-500/70 hover:bg-red-500/90' : ''}`}
-            onClick={handleRecordClick}
+            className={`transition-colors rounded-md px-2 py-1 text-[11px] leading-none flex items-center gap-1.5 ${
+              isCopilotOpen
+                ? "bg-emerald-500/80 hover:bg-emerald-500 text-white shadow-md font-medium"
+                : "bg-white/10 hover:bg-white/20 text-white/80"
+            }`}
+            onClick={onCopilotToggle}
             type="button"
+            title="Toggle Live Interview Copilot (Dual audio capture & instant Q&A answers)"
           >
-            {isRecording ? (
-              <span className="animate-pulse">● Stop Recording</span>
+            {isCopilotOpen ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                <span>Copilot Active</span>
+              </>
             ) : (
-              <span>🎤 Record Voice</span>
+              <span>🎙️ Live Copilot</span>
             )}
           </button>
         </div>
@@ -235,23 +206,15 @@ const QueueCommands: React.FC<QueueCommandsProps> = ({
         {/* Separator */}
         <div className="mx-2 h-4 w-px bg-white/20" />
 
-        {/* Sign Out Button - Moved to end */}
+        {/* Quit App Button */}
         <button
           className="text-red-500/70 hover:text-red-500/90 transition-colors hover:cursor-pointer"
-          title="Sign Out"
+          title="Quit App"
           onClick={() => window.electronAPI.quitApp()}
         >
           <IoLogOutOutline className="w-4 h-4" />
         </button>
       </div>
-      {/* Audio Result Display */}
-      {audioResult && (
-        <div className="mt-2 p-2 bg-white/10 rounded text-white text-xs max-w-md">
-          <span className="font-semibold">Audio Result:</span> {audioResult}
-        </div>
-      )}
-      {/* Chat Dialog Overlay */}
-      {/* Remove the Dialog component */}
     </div>
   )
 }
